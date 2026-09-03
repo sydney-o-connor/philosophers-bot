@@ -1,8 +1,30 @@
+# Generated data -- regenerate with the scripts, don't commit
 texts/
 chroma_db/
 dataset/
 eval/results/
+
+# Fine-tuned model artifacts (from finetune_colab.ipynb export)
+*.gguf
+Modelfile
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# Virtual environments
 .venv/
 venv/
+env/
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
