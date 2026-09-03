@@ -18,9 +18,9 @@ import glob
 import chromadb
 from sentence_transformers import SentenceTransformer
 
+from config import DB_DIR, COLLECTION_NAME, EMBED_MODEL_NAME
+
 TEXTS_DIR = "texts"
-DB_DIR = "chroma_db"
-COLLECTION_NAME = "philosophers"
 
 CHUNK_SIZE = 800       # characters per chunk (roughly ~150-200 words)
 CHUNK_OVERLAP = 150    # overlap so ideas aren't cut mid-thought
@@ -57,7 +57,7 @@ def main():
         return
 
     print("Loading local embedding model (first run downloads ~80MB, then it's cached)...")
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    model = SentenceTransformer(EMBED_MODEL_NAME)
 
     client = chromadb.PersistentClient(path=DB_DIR)
     # Fresh build each time; delete old collection if it exists

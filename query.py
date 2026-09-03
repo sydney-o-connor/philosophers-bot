@@ -20,12 +20,7 @@ import chromadb
 import ollama
 from sentence_transformers import SentenceTransformer
 
-DB_DIR = "chroma_db"
-COLLECTION_NAME = "philosophers"
-OLLAMA_MODEL = "llama3.1:8b"   # change to any model you've pulled, e.g. "mistral"
-TOP_K = 10                     # how many passages to retrieve per question
-CANDIDATE_POOL = 30            # how many nearest matches to pull before diversifying
-MAX_PER_AUTHOR = 3             # cap per philosopher so one voice doesn't dominate
+from config import DB_DIR, COLLECTION_NAME, OLLAMA_MODEL, TOP_K, CANDIDATE_POOL, MAX_PER_AUTHOR, EMBED_MODEL_NAME
 
 # This is the bot's persona. It's written so the model treats the retrieved
 # excerpts as its OWN internalized knowledge — background it has absorbed —
@@ -86,22 +81,22 @@ def retrieve(collection, model, question, k=TOP_K, pool=CANDIDATE_POOL, max_per_
     return passages
 
 
-def build_prompt(question, passages):
+def build_context_message(question, passages):
+    """Formats one turn's retrieved passages + question into a user
+    message. Unlike the old single-shot build_prompt(), this gets
+    appended to a growing messages list rather than replacing it --
+    that's what gives the bot conversation memory across turns."""
     context = "\n\n---\n\n".join(passages)
-    return f"""{SYSTEM_PROMPT}
-
-BACKGROUND KNOWLEDGE:
+    return f"""BACKGROUND KNOWLEDGE:
 {context}
 
-QUESTION: {question}
-
-Answer as yourself, in your own synthesized voice:"""
+QUESTION: {question}"""
 
 
 def load_retrieval():
     """Loads the embedding model and Chroma collection. Shared by main()
     here and by evaluate_model.py, so both use identical retrieval."""
-    embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+    embed_model = SentenceTransformer(EMBED_MODEL_NAME)
     client = chromadb.PersistentClient(path=DB_DIR)
     collection = client.get_collection(COLLECTION_NAME)
     return collection, embed_model
@@ -112,27 +107,44 @@ def main():
     collection, embed_model = load_retrieval()
 
     print(f"Ready. Using Ollama model: {OLLAMA_MODEL}")
-    print("Ask a philosophical question, or type 'exit' to quit.\n")
+    print("Ask a philosophical question, or type 'exit' to quit.")
+    print("Type 'reset' to clear conversation history and start fresh.\n")
+
+    # This list is the bot's conversation memory -- it grows with each
+    # turn so follow-up questions have the earlier exchange as context,
+    # rather than each question being answered in isolation.
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
     while True:
         question = input("You: ").strip()
         if question.lower() in ("exit", "quit"):
             break
+        if question.lower() == "reset":
+            messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+            print("(Conversation history cleared.)\n")
+            continue
         if not question:
             continue
 
         passages = retrieve(collection, embed_model, question)
-        prompt = build_prompt(question, passages)
+        messages.append({"role": "user", "content": build_context_message(question, passages)})
 
         print("\nBot: ", end="", flush=True)
         stream = ollama.chat(
             model=OLLAMA_MODEL,
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
             stream=True,
         )
+        answer_chunks = []
         for chunk in stream:
-            print(chunk["message"]["content"], end="", flush=True)
+            piece = chunk["message"]["content"]
+            answer_chunks.append(piece)
+            print(piece, end="", flush=True)
         print("\n")
+
+        # Store the assistant's reply in history too, so the NEXT turn
+        # can refer back to it ("what did you just say about X?").
+        messages.append({"role": "assistant", "content": "".join(answer_chunks)})
 
 
 if __name__ == "__main__":

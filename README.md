@@ -1,5 +1,8 @@
 # Philosopher RAG Bot
 
+[![Tests](https://github.com/sydney-o-connor/philosophers-bot/actions/workflows/tests.yml/badge.svg)](https://github.com/sydney-o-connor/philosophers-bot/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 **A local, free chatbot that synthesizes ideas from classic philosophers into one coherent voice.**
 
 Ask it a question and it reasons across Plato, Aristotle, Descartes, Hume, Kant, Nietzsche, Mill, and Marx — weaving their ideas together like a single well-read thinker, rather than reciting quotes at you one by one. Everything runs on your own machine: no API keys, no paid services, no data leaving your laptop.
@@ -7,6 +10,7 @@ Ask it a question and it reasons across Plato, Aristotle, Descartes, Hume, Kant,
 ## Features
 
 - 🧠 **Synthesized reasoning, not citation dumping** — answers in one continuous voice, naming a philosopher only when it genuinely clarifies something
+- 💬 **Real conversation memory** — the chat remembers earlier turns, so follow-up questions actually build on what came before
 - 🔀 **Diversified retrieval** — pulls from multiple philosophers per answer instead of whichever book happens to phrase things closest to your question
 - 💸 **$0 cost** — local embeddings, local vector store, local LLM via [Ollama](https://ollama.com), and even the optional fine-tuning step uses Colab's free GPU tier
 - 📚 **Public-domain sources** — texts pulled straight from Project Gutenberg
@@ -18,9 +22,10 @@ Ask it a question and it reasons across Plato, Aristotle, Descartes, Hume, Kant,
 
 ```
 philosopher-rag/
+├── config.py                        # shared settings (model names, DB paths) — edit here, not per-file
 ├── download_texts.py                # pulls public-domain texts from Project Gutenberg
 ├── build_index.py                   # chunks + embeds texts into a local Chroma vector DB
-├── query.py                         # interactive chat loop (retrieval + synthesis prompt)
+├── query.py                         # interactive chat loop (retrieval + synthesis prompt + memory)
 ├── extract_dialogue_dataset.py      # mines real Q&A pairs from Plato-style dialogues
 ├── generate_synthetic_dataset.py    # generates extra Q&A pairs from essay-style texts via local LLM
 ├── build_dataset.py                 # runs both dataset steps above + combines them (one command)
@@ -29,12 +34,14 @@ philosopher-rag/
 ├── eval/
 │   ├── rubric.md                     # human-readable rubric definitions
 │   ├── test_cases.jsonl              # test conversations covering each dimension
-│   └── results/                      # created by evaluate_model.py — reports land here
+│   └── results/                      # created by evaluate_model.py — reports land here (gitignored)
 ├── requirements.txt
+├── .gitignore
+├── LICENSE
 ├── tests/                            # pytest unit tests
-├── texts/                             # created after download step — raw downloaded texts
-├── dataset/                            # created by the dataset scripts — training pairs (.jsonl)
-└── chroma_db/                           # created after index-build step — the vector index
+├── texts/                             # created after download step — raw downloaded texts (gitignored)
+├── dataset/                            # created by the dataset scripts — training pairs (.jsonl, gitignored)
+└── chroma_db/                           # created after index-build step — the vector index (gitignored)
 ```
 
 ## How it works
@@ -70,7 +77,9 @@ ollama pull llama3.1:8b
 
 (If your machine is older/slower, try a smaller model instead, e.g.
 `ollama pull mistral` or `ollama pull llama3.2:3b` — just update
-`OLLAMA_MODEL` in `query.py` to match.)
+`OLLAMA_MODEL` in `config.py` to match. All the scripts in this repo read
+their model and path settings from `config.py`, so that's the one place
+to change it.)
 
 ### 3. Download the philosophy texts
 
@@ -104,7 +113,10 @@ Ask things like:
 - "How do Aristotle and Nietzsche differ on the idea of virtue?"
 - "Summarize Mill's argument for utilitarianism"
 
-Type `exit` to quit.
+The chat remembers earlier turns in the conversation — you can ask a
+follow-up like "but doesn't that contradict what you just said?" and it
+will actually have that context. Type `reset` to clear history and start
+a fresh conversation, or `exit` to quit.
 
 ## How the bot's "voice" works
 

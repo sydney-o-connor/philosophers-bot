@@ -42,13 +42,11 @@ import threading
 import ollama
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from config import OLLAMA_MODEL as DEFAULT_MODEL
+
 TEXTS_DIR = "texts"
 OUTPUT_DIR = "dataset"
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "synthetic_pairs.jsonl")
-
-DEFAULT_MODEL = "llama3.1:8b"      # match whatever you're using in query.py,
-                                    # or pass a smaller/faster one with --model
-                                    # e.g. llama3.2:3b or phi3
 
 DEFAULT_CHUNK_SIZE = 1200          # characters per chunk fed to the generator
 DEFAULT_MAX_CHUNKS = 40            # cap runtime -- lower with --max-chunks for a faster first run

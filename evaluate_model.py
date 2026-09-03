@@ -29,7 +29,7 @@ from datetime import datetime
 
 import ollama
 
-from query import load_retrieval, retrieve, SYSTEM_PROMPT, OLLAMA_MODEL as DEFAULT_BOT_MODEL
+from query import load_retrieval, retrieve, build_context_message, SYSTEM_PROMPT, OLLAMA_MODEL as DEFAULT_BOT_MODEL
 
 DEFAULT_TEST_FILE = "eval/test_cases.jsonl"
 DEFAULT_OUTPUT_DIR = "eval/results"
@@ -76,9 +76,7 @@ def run_conversation(test_case, collection, embed_model, bot_model):
 
     for turn in test_case["turns"]:
         passages = retrieve(collection, embed_model, turn)
-        context = "\n\n---\n\n".join(passages)
-        user_content = f"BACKGROUND KNOWLEDGE:\n{context}\n\nQUESTION: {turn}"
-        messages.append({"role": "user", "content": user_content})
+        messages.append({"role": "user", "content": build_context_message(turn, passages)})
 
         response = ollama.chat(model=bot_model, messages=messages)
         answer = response["message"]["content"]
