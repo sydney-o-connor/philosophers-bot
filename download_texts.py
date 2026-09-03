@@ -38,6 +38,8 @@ BOOKS = [
      "https://www.gutenberg.org/cache/epub/11224/pg11224.txt"),
     ("marx_manifesto.txt", "Marx & Engels", "The Communist Manifesto",
      "https://www.gutenberg.org/cache/epub/61/pg61.txt"),
+     ("machiavelli_the_prince.txt", "Machiavelli", "The Prince", 
+     "https://www.gutenberg.org/cache/epub/1232/pg1232.txt")
 ]
 
 
