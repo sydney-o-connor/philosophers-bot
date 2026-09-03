@@ -1,0 +1,8 @@
+texts/
+chroma_db/
+dataset/
+eval/results/
+__pycache__/
+*.pyc
+.venv/
+venv/
