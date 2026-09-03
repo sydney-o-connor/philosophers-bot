@@ -157,6 +157,24 @@ without the synthetic step:
 python3 build_dataset.py --skip-synthetic
 ```
 
+**Speed options**, if generation feels slow (each chunk is a full model
+call — this is normal, especially on CPU):
+
+```bash
+python3 build_dataset.py --model llama3.2:3b   # smaller model = biggest speed win
+python3 build_dataset.py --workers 3           # generate multiple chunks concurrently
+python3 build_dataset.py --max-chunks 15       # fewer chunks per book, faster first run
+```
+
+These flags pass straight through to `generate_synthetic_dataset.py`,
+which you can also run directly with `--help` to see the full set of
+options (including `--chunk-size` and `--max-output-tokens`). A smaller
+model (e.g. `llama3.2:3b`, pulled with `ollama pull llama3.2:3b`) is the
+single biggest lever — often 3-5x faster than an 8B model on CPU, at
+some cost to response coherence. `--workers` only helps if your machine
+has spare CPU/GPU headroom; pushing it too high on a modest laptop can
+make things slower, not faster, so try 2-3 before going higher.
+
 **Spot-check `dataset/combined.jsonl`** before training either way — text
 parsing from raw files is imperfect, and the occasional footnote,
 mis-generated pair, or stage direction can slip through.

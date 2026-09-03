@@ -16,6 +16,9 @@ Usage:
     python3 build_dataset.py --skip-synthetic  # skip the Ollama-based step
                                                 # (faster, no Ollama required,
                                                 # but less training data)
+    python3 build_dataset.py --model llama3.2:3b --workers 3
+                                                # pass speed flags through to
+                                                # generate_synthetic_dataset.py
 """
 
 import os
@@ -30,13 +33,13 @@ SYNTHETIC_FILE = os.path.join(DATASET_DIR, "synthetic_pairs.jsonl")
 COMBINED_FILE = os.path.join(DATASET_DIR, "combined.jsonl")
 
 
-def run_step(description, script_name):
+def run_step(description, cmd):
     print(f"\n{'=' * 60}")
     print(f"  {description}")
     print(f"{'=' * 60}\n")
-    result = subprocess.run([sys.executable, script_name])
+    result = subprocess.run(cmd)
     if result.returncode != 0:
-        print(f"\n[warning] {script_name} exited with an error (code {result.returncode}).")
+        print(f"\n[warning] {cmd[1]} exited with an error (code {result.returncode}).")
         print("Continuing pipeline, but check the output above.")
     return result.returncode == 0
 
@@ -67,6 +70,9 @@ def main():
         "--skip-synthetic", action="store_true",
         help="Skip the Ollama-based synthetic generation step (faster, no Ollama needed, less data)"
     )
+    parser.add_argument("--model", default=None, help="Ollama model for synthetic generation (passed through to generate_synthetic_dataset.py, e.g. llama3.2:3b for speed)")
+    parser.add_argument("--workers", type=int, default=None, help="Concurrent chunk generations (passed through to generate_synthetic_dataset.py)")
+    parser.add_argument("--max-chunks", type=int, default=None, help="Max chunks per book (passed through to generate_synthetic_dataset.py)")
     args = parser.parse_args()
 
     if not os.path.isdir(TEXTS_DIR) or not os.listdir(TEXTS_DIR):
@@ -75,13 +81,22 @@ def main():
 
     os.makedirs(DATASET_DIR, exist_ok=True)
 
-    run_step("Step 1/2: Extracting real dialogue pairs", "extract_dialogue_dataset.py")
+    run_step("Step 1/2: Extracting real dialogue pairs", [sys.executable, "extract_dialogue_dataset.py"])
 
     if not args.skip_synthetic:
         print("\nStep 2/2 uses your local Ollama model -- make sure Ollama is")
         print("running (ollama serve) with a model pulled, or rerun this with")
         print("--skip-synthetic to skip it.")
-        run_step("Step 2/2: Generating synthetic pairs from essay-style texts", "generate_synthetic_dataset.py")
+
+        synthetic_cmd = [sys.executable, "generate_synthetic_dataset.py"]
+        if args.model:
+            synthetic_cmd += ["--model", args.model]
+        if args.workers:
+            synthetic_cmd += ["--workers", str(args.workers)]
+        if args.max_chunks:
+            synthetic_cmd += ["--max-chunks", str(args.max_chunks)]
+
+        run_step("Step 2/2: Generating synthetic pairs from essay-style texts", synthetic_cmd)
     else:
         print("\nSkipping synthetic generation (--skip-synthetic was passed).")
 

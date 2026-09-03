@@ -23,6 +23,11 @@ Prerequisites:
 Output: dataset/synthetic_pairs.jsonl (same schema as dialogue_pairs.jsonl,
 so the two files can be concatenated before fine-tuning)
 
+Speed options (see also --help):
+    python3 generate_synthetic_dataset.py --model llama3.2:3b   # smaller/faster model
+    python3 generate_synthetic_dataset.py --workers 3           # parallel generation
+    python3 generate_synthetic_dataset.py --max-chunks 15       # fewer chunks per book
+
 Usage:
     python3 generate_synthetic_dataset.py
 """
@@ -32,17 +37,23 @@ import re
 import json
 import glob
 import time
+import argparse
+import threading
 import ollama
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 TEXTS_DIR = "texts"
 OUTPUT_DIR = "dataset"
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "synthetic_pairs.jsonl")
 
-OLLAMA_MODEL = "llama3.1:8b"   # match whatever you're using in query.py
+DEFAULT_MODEL = "llama3.1:8b"      # match whatever you're using in query.py,
+                                    # or pass a smaller/faster one with --model
+                                    # e.g. llama3.2:3b or phi3
 
-CHUNK_SIZE = 1200              # characters per chunk fed to the generator
-MAX_CHUNKS_PER_BOOK = 40       # cap runtime -- lower this for a faster first run
-MAX_OUTPUT_TOKENS = 300        # caps generation length so calls don't run long
+DEFAULT_CHUNK_SIZE = 1200          # characters per chunk fed to the generator
+DEFAULT_MAX_CHUNKS = 40            # cap runtime -- lower with --max-chunks for a faster first run
+DEFAULT_MAX_OUTPUT_TOKENS = 300    # caps generation length so calls don't run long
+DEFAULT_WORKERS = 1                # how many chunks to generate concurrently
 
 # Skip files already well covered by real dialogue extraction, since
 # those already produce authentic Q&A pairs. Edit this list to match
@@ -71,7 +82,7 @@ def parse_metadata(text):
     return author, title, body
 
 
-def chunk_text(text, size=CHUNK_SIZE):
+def chunk_text(text, size):
     text = re.sub(r"\n{3,}", "\n\n", text)
     chunks = []
     start = 0
@@ -109,21 +120,42 @@ def extract_json(raw_response):
     return data
 
 
-def generate_pair(chunk, author, title):
+def generate_pair(chunk, author, title, model, max_output_tokens):
     prompt = GENERATION_PROMPT.format(author=author, title=title, excerpt=chunk)
     response = ollama.chat(
-        model=OLLAMA_MODEL,
+        model=model,
         messages=[{"role": "user", "content": prompt}],
         # Capping output length keeps each call fast and predictable --
         # without this, a model can occasionally ramble well past what's
         # needed for a short JSON object.
-        options={"num_predict": MAX_OUTPUT_TOKENS},
+        options={"num_predict": max_output_tokens},
     )
     raw = response["message"]["content"]
     return extract_json(raw)
 
 
+def process_chunk(i, chunk, author, title, model, max_output_tokens):
+    """Runs one generation and returns a result dict -- kept separate from
+    the printing/writing logic so it can be called from a thread pool."""
+    start_time = time.time()
+    try:
+        pair = generate_pair(chunk, author, title, model, max_output_tokens)
+        elapsed = time.time() - start_time
+        return {"index": i, "pair": pair, "elapsed": elapsed, "error": None}
+    except Exception as e:
+        elapsed = time.time() - start_time
+        return {"index": i, "pair": None, "elapsed": elapsed, "error": str(e)}
+
+
 def main():
+    parser = argparse.ArgumentParser(description="Generate synthetic Q&A training pairs via a local Ollama model.")
+    parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Ollama model to use (default: {DEFAULT_MODEL}). A smaller model (e.g. llama3.2:3b) is the single biggest speed lever.")
+    parser.add_argument("--max-chunks", type=int, default=DEFAULT_MAX_CHUNKS, help=f"Max chunks per book (default: {DEFAULT_MAX_CHUNKS}). Lower this for a faster run.")
+    parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK_SIZE, help=f"Characters per chunk (default: {DEFAULT_CHUNK_SIZE}). Smaller chunks = less for the model to read per call.")
+    parser.add_argument("--max-output-tokens", type=int, default=DEFAULT_MAX_OUTPUT_TOKENS, help=f"Max generated tokens per call (default: {DEFAULT_MAX_OUTPUT_TOKENS}). Lower = faster but risks truncated JSON.")
+    parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS, help=f"Chunks to generate concurrently (default: {DEFAULT_WORKERS}). Only helps if your machine has spare CPU/GPU capacity -- see README for details.")
+    args = parser.parse_args()
+
     files = [
         f for f in glob.glob(os.path.join(TEXTS_DIR, "*.txt"))
         if os.path.basename(f) not in DIALOGUE_FILES_TO_SKIP
@@ -134,7 +166,9 @@ def main():
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    print(f"Using local Ollama model: {OLLAMA_MODEL}")
+    print(f"Using local Ollama model: {args.model}")
+    if args.workers > 1:
+        print(f"Running {args.workers} chunks concurrently.")
     print("Make sure Ollama is running (ollama serve) before continuing.")
     print("Each chunk requires one full model generation -- on CPU this can take")
     print("anywhere from a few seconds to over a minute per chunk. Progress prints")
@@ -143,8 +177,9 @@ def main():
     print("whatever's been generated so far.\n")
 
     total_pairs = 0
+    write_lock = threading.Lock()
 
-    # Open in append mode and write as we go, rather than holding
+    # Open in write mode and write as we go, rather than holding
     # everything in memory until the end -- this way an interrupted run
     # (or a crash partway through a long book) still leaves usable output.
     with open(OUTPUT_FILE, "w", encoding="utf-8") as out_f:
@@ -154,26 +189,21 @@ def main():
                     raw = f.read()
 
                 author, title, body = parse_metadata(raw)
-                chunks = chunk_text(body)[:MAX_CHUNKS_PER_BOOK]
+                chunks = chunk_text(body, args.chunk_size)[:args.max_chunks]
 
                 print(f"{title} ({author}): generating from {len(chunks)} chunks...")
                 book_pairs = 0
 
-                for i, chunk in enumerate(chunks):
-                    print(f"    [{i + 1}/{len(chunks)}] generating...", end=" ", flush=True)
-                    start_time = time.time()
+                def handle_result(result):
+                    nonlocal book_pairs, total_pairs
+                    i, pair, elapsed, error = result["index"], result["pair"], result["elapsed"], result["error"]
 
-                    try:
-                        pair = generate_pair(chunk, author, title)
-                    except Exception as e:
-                        print(f"FAILED ({e})")
-                        continue
-
-                    elapsed = time.time() - start_time
-
+                    if error:
+                        print(f"    [{i + 1}/{len(chunks)}] FAILED ({error})")
+                        return
                     if pair is None:
-                        print(f"skipped, unparseable output ({elapsed:.1f}s)")
-                        continue
+                        print(f"    [{i + 1}/{len(chunks)}] skipped, unparseable output ({elapsed:.1f}s)")
+                        return
 
                     record = {
                         "philosopher": author,
@@ -183,12 +213,25 @@ def main():
                         "instruction": pair["instruction"],
                         "output": pair["output"],
                     }
-                    out_f.write(json.dumps(record, ensure_ascii=False) + "\n")
-                    out_f.flush()
-
+                    with write_lock:
+                        out_f.write(json.dumps(record, ensure_ascii=False) + "\n")
+                        out_f.flush()
                     book_pairs += 1
                     total_pairs += 1
-                    print(f"OK ({elapsed:.1f}s)")
+                    print(f"    [{i + 1}/{len(chunks)}] OK ({elapsed:.1f}s)")
+
+                if args.workers <= 1:
+                    for i, chunk in enumerate(chunks):
+                        result = process_chunk(i, chunk, author, title, args.model, args.max_output_tokens)
+                        handle_result(result)
+                else:
+                    with ThreadPoolExecutor(max_workers=args.workers) as executor:
+                        futures = [
+                            executor.submit(process_chunk, i, chunk, author, title, args.model, args.max_output_tokens)
+                            for i, chunk in enumerate(chunks)
+                        ]
+                        for future in as_completed(futures):
+                            handle_result(future.result())
 
                 print(f"  -> {book_pairs} pairs generated\n")
 
