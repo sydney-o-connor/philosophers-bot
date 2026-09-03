@@ -10,8 +10,10 @@ services — everything runs on your own machine.
 2. **build_index.py** — chunks the texts and embeds them locally, storing
    them in a Chroma vector database
 3. **query.py** — an interactive chat: your question gets matched against
-   the most relevant passages, which are fed to a local LLM (via Ollama)
-   to generate a grounded answer
+   relevant passages from multiple philosophers, which are fed to a local
+   LLM (via Ollama) as internalized background knowledge. The bot answers
+   in its own synthesized voice — weaving ideas together the way a
+   well-read thinker would — rather than listing citations one by one.
 
 ## Setup
 
@@ -69,14 +71,34 @@ Ask things like:
 
 Type `exit` to quit.
 
+## How the bot's "voice" works
+
+`query.py` doesn't just dump the closest-matching passage into the prompt.
+Two things make it feel more like a single synthesized thinker rather than
+a citation lookup:
+
+- **Diversified retrieval**: it pulls a wider pool of candidate passages
+  (30 by default) and caps how many can come from any one philosopher
+  (3 by default), so an answer is more likely to actually draw on several
+  thinkers instead of whichever book phrased things closest to your
+  question.
+- **Persona prompt**: the system prompt tells the model to treat the
+  retrieved passages as knowledge it has already internalized, and to
+  answer in one continuous voice — naming a philosopher only when it adds
+  real clarity, not as a running citation habit.
+
+You can tune `TOP_K`, `CANDIDATE_POOL`, and `MAX_PER_AUTHOR` at the top of
+`query.py` to make answers pull from more or fewer thinkers per response.
+
 ## Notes & next steps
 
 - **Adding more philosophers**: add entries to `BOOKS` in
   `download_texts.py`, rerun it, then rerun `build_index.py`.
-- **Changing the "voice"**: right now this is RAG — it retrieves and
-  answers using an off-the-shelf model. If you want the bot to *sound*
-  more like a specific philosopher (not just cite them), that's a
-  fine-tuning step, which is a bigger project on top of this one.
+- **This is still RAG under the hood**: it's a general-purpose model
+  reasoning over retrieved passages, not a model that has actually
+  learned to think differently. If you want a genuinely distinct
+  reasoning style (not just well-briefed answers), that's a fine-tuning
+  step on argumentation patterns — a bigger project on top of this one.
 - **Speed**: everything runs on CPU by default. If you have a decent
   GPU, Ollama will automatically use it and responses will be much
   faster.
