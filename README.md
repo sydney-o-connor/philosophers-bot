@@ -1,6 +1,6 @@
 # Philosopher RAG Bot
 
-[![Tests](https://github.com/sydney-o-connor/philosophers-bot/actions/workflows/tests.yml/badge.svg)](https://github.com/sydney-o-connor/philosophers-bot/actions)
+[![Tests]([![tests.yml](https://github.com/sydney-o-connor/philosophers-bot/actions/workflows/test.yml/badge.svg)](https://github.com/sydney-o-connor/philosophers-bot/actions/workflows/test.yml))](https://github.com/sydney-o-connor/philosophers-bot/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **A local, free chatbot that synthesizes ideas from classic philosophers into one coherent voice.**
@@ -310,13 +310,3 @@ python3 -m pytest
 - **Copyright**: all texts here are public domain. If you want to add
   more recent philosophers, check their copyright status first —
   Gutenberg only hosts public-domain works.
-
-## License
-
-The code in this repo is provided as-is — add a `LICENSE` file (MIT is a
-common, permissive choice) if you want to make the terms explicit for
-others using or contributing to it.
-
-All philosophical texts downloaded by `download_texts.py` are public
-domain in the US (via [Project Gutenberg](https://www.gutenberg.org)),
-independent of whatever license you choose for the code itself.
