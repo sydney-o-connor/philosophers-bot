@@ -40,7 +40,7 @@ BOOKS = [
      "https://www.gutenberg.org/cache/epub/61/pg61.txt"),
      ("machiavelli_the_prince.txt", "Machiavelli", "The Prince", 
      "https://www.gutenberg.org/cache/epub/1232/pg1232.txt"),
-     ("augustine_confessions.txt", "Saint Augustine", "The Confessions of St. Augustine"
+     ("augustine_confessions.txt", "Saint of Hippo Augustine", "The Confessions of St. Augustine",
      "https://www.gutenberg.org/cache/epub/3296/pg3296.txt")
 ]
 

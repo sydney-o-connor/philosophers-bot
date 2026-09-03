@@ -11,6 +11,7 @@ Ask it a question and it reasons across Plato, Aristotle, Descartes, Hume, Kant,
 - 💸 **$0 cost** — local embeddings, local vector store, local LLM via [Ollama](https://ollama.com), and even the optional fine-tuning step uses Colab's free GPU tier
 - 📚 **Public-domain sources** — texts pulled straight from Project Gutenberg
 - 🎓 **Optional fine-tuning pipeline** — mine real Socratic dialogue into training data, augment with synthetic examples, and QLoRA-finetune for a more distinct reasoning style
+- 📊 **Rubric-based evaluation** — automated scoring of response quality (validity, focus, groundedness, synthesis, error recovery, and more) with an LLM judge
 - 🔧 **Easy to extend** — add any public-domain philosopher with one line
 
 ## Project structure
@@ -24,6 +25,11 @@ philosopher-rag/
 ├── generate_synthetic_dataset.py    # generates extra Q&A pairs from essay-style texts via local LLM
 ├── build_dataset.py                 # runs both dataset steps above + combines them (one command)
 ├── finetune_colab.ipynb             # free QLoRA fine-tuning notebook (Unsloth, Colab T4)
+├── evaluate_model.py                # scores the bot's responses against a quality rubric
+├── eval/
+│   ├── rubric.md                     # human-readable rubric definitions
+│   ├── test_cases.jsonl              # test conversations covering each dimension
+│   └── results/                      # created by evaluate_model.py — reports land here
 ├── requirements.txt
 ├── tests/                            # pytest unit tests
 ├── texts/                             # created after download step — raw downloaded texts
@@ -217,6 +223,63 @@ else — retrieval, the persona prompt, the chat loop — works unchanged.
   is still doing the heavy lifting on content grounding.
 - Colab's free tier can disconnect on idle or high GPU demand — don't
   close the tab mid-training.
+
+## Testing the bot's responses (evaluation rubric)
+
+Beyond unit tests for the scripts themselves, this repo includes an
+automated rubric harness for judging the *quality* of the bot's actual
+answers — separate from whether the code runs correctly.
+
+```bash
+python3 evaluate_model.py
+```
+
+This runs a set of test conversations from `eval/test_cases.jsonl`
+through your bot (using the same retrieval + persona setup as `query.py`),
+then uses an LLM judge to score each response 1-5 across seven
+dimensions:
+
+- **Validity** — is the reasoning logically sound?
+- **Focus** — does it actually answer what was asked?
+- **Groundedness** — are claims real, not fabricated?
+- **Synthesis** — one coherent voice, or a citation list?
+- **Progress** *(multi-turn only)* — does it build on the conversation?
+- **Error recovery** — does it admit gaps instead of confabulating on
+  out-of-scope or trick questions?
+- **Voice consistency** — does the persona hold up across a conversation?
+
+Full definitions are in `eval/rubric.md`. The test set deliberately
+includes adversarial cases — questions about philosophers not in your
+corpus, requests for fabricated quotes, an instruction-override attempt
+— specifically to exercise error recovery, since easy questions can't
+test that dimension.
+
+Output lands in `eval/results/`: a markdown report with per-dimension
+averages and any case that scored 1-2 on something flagged for review,
+plus the raw JSON scores.
+
+**Useful flags:**
+
+```bash
+python3 evaluate_model.py --bot-model llama3.2:3b            # test a different model
+python3 evaluate_model.py --judge-model llama3.1:8b          # use a different judge
+python3 evaluate_model.py --test-file eval/my_cases.jsonl    # your own test set
+```
+
+**A real limitation worth knowing**: if `--bot-model` and `--judge-model`
+are the same model (the default), the judge is grading its own work —
+treat scores as a rough signal, not ground truth. If you have a second
+or larger model pulled in Ollama, point `--judge-model` at that for a
+more independent read. Either way, the report is meant to point you at
+transcripts worth reading, not to replace reading them.
+
+You can add your own test cases by appending lines to
+`eval/test_cases.jsonl` (or a new file) in the same format:
+```json
+{"id": "my_test_01", "type": "single_turn", "dimension_focus": ["validity"], "turns": ["Your question here"]}
+```
+Use `"type": "multi_turn"` with multiple strings in `"turns"` to test
+follow-up questions and conversational progress.
 
 ## Running tests
 

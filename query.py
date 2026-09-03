@@ -98,11 +98,18 @@ QUESTION: {question}
 Answer as yourself, in your own synthesized voice:"""
 
 
-def main():
-    print("Loading embedding model and vector store...")
+def load_retrieval():
+    """Loads the embedding model and Chroma collection. Shared by main()
+    here and by evaluate_model.py, so both use identical retrieval."""
     embed_model = SentenceTransformer("all-MiniLM-L6-v2")
     client = chromadb.PersistentClient(path=DB_DIR)
     collection = client.get_collection(COLLECTION_NAME)
+    return collection, embed_model
+
+
+def main():
+    print("Loading embedding model and vector store...")
+    collection, embed_model = load_retrieval()
 
     print(f"Ready. Using Ollama model: {OLLAMA_MODEL}")
     print("Ask a philosophical question, or type 'exit' to quit.\n")
