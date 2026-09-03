@@ -8,20 +8,27 @@ Ask it a question and it reasons across Plato, Aristotle, Descartes, Hume, Kant,
 
 - 🧠 **Synthesized reasoning, not citation dumping** — answers in one continuous voice, naming a philosopher only when it genuinely clarifies something
 - 🔀 **Diversified retrieval** — pulls from multiple philosophers per answer instead of whichever book happens to phrase things closest to your question
-- 💸 **$0 cost** — local embeddings, local vector store, local LLM via [Ollama](https://ollama.com)
+- 💸 **$0 cost** — local embeddings, local vector store, local LLM via [Ollama](https://ollama.com), and even the optional fine-tuning step uses Colab's free GPU tier
 - 📚 **Public-domain sources** — texts pulled straight from Project Gutenberg
+- 🎓 **Optional fine-tuning pipeline** — mine real Socratic dialogue into training data, augment with synthetic examples, and QLoRA-finetune for a more distinct reasoning style
 - 🔧 **Easy to extend** — add any public-domain philosopher with one line
 
 ## Project structure
 
 ```
 philosopher-rag/
-├── download_texts.py    # pulls public-domain texts from Project Gutenberg
-├── build_index.py       # chunks + embeds texts into a local Chroma vector DB
-├── query.py             # interactive chat loop (retrieval + synthesis prompt)
+├── download_texts.py                # pulls public-domain texts from Project Gutenberg
+├── build_index.py                   # chunks + embeds texts into a local Chroma vector DB
+├── query.py                         # interactive chat loop (retrieval + synthesis prompt)
+├── extract_dialogue_dataset.py      # mines real Q&A pairs from Plato-style dialogues
+├── generate_synthetic_dataset.py    # generates extra Q&A pairs from essay-style texts via local LLM
+├── build_dataset.py                 # runs both dataset steps above + combines them (one command)
+├── finetune_colab.ipynb             # free QLoRA fine-tuning notebook (Unsloth, Colab T4)
 ├── requirements.txt
-├── texts/                # created after step 3 — raw downloaded texts
-└── chroma_db/             # created after step 4 — the vector index
+├── tests/                            # pytest unit tests
+├── texts/                             # created after download step — raw downloaded texts
+├── dataset/                            # created by the dataset scripts — training pairs (.jsonl)
+└── chroma_db/                           # created after index-build step — the vector index
 ```
 
 ## How it works
@@ -112,15 +119,98 @@ a citation lookup:
 You can tune `TOP_K`, `CANDIDATE_POOL`, and `MAX_PER_AUTHOR` at the top of
 `query.py` to make answers pull from more or fewer thinkers per response.
 
+## Going further: fine-tuning for a distinct reasoning style
+
+RAG (everything above) gives you a general-purpose model that's well
+*briefed* on philosophy — it retrieves and reasons over passages, but its
+underlying reasoning process is unchanged. If you want something closer
+to a genuinely distinct argumentative style, that requires fine-tuning
+the model itself on examples of philosophical reasoning, not just facts.
+
+This repo includes a free pipeline for that, using QLoRA (a lightweight
+fine-tuning method) on Google Colab's free GPU tier.
+
+### 6. Build the fine-tuning dataset (one command)
+
+```bash
+python3 build_dataset.py
+```
+
+This runs the full dataset pipeline in one step:
+- **Mines real dialogue** — parses your downloaded texts for speaker-labeled
+  exchanges (Plato's works are the best source — Gutenberg formats them
+  as scripted dialogue) into instruction/output training pairs. This is
+  **real argumentative structure straight from the source**, the
+  highest-quality data in the pipeline.
+- **Generates synthetic pairs** — for essay-style texts that have no
+  dialogue to mine (Kant, Mill, Hume, Marx), it uses your **local** Ollama
+  model (free, no API costs) to generate a plausible question + in-character
+  response grounded in each passage. Lower quality than the real dialogue
+  data, so it's a supplement, not a replacement.
+- **Combines both** into `dataset/combined.jsonl`, ready to upload to the
+  fine-tuning notebook.
+
+If Ollama isn't running or you just want the higher-quality dialogue data
+without the synthetic step:
+
+```bash
+python3 build_dataset.py --skip-synthetic
+```
+
+**Spot-check `dataset/combined.jsonl`** before training either way — text
+parsing from raw files is imperfect, and the occasional footnote,
+mis-generated pair, or stage direction can slip through.
+
+### 7. Fine-tune on Google Colab (free)
+
+Open `finetune_colab.ipynb` in [Google Colab](https://colab.research.google.com):
+
+1. `Runtime` → `Change runtime type` → select **T4 GPU** (free tier)
+2. Upload your `dataset/combined.jsonl` using the Colab file browser
+3. Run all cells top to bottom
+
+The notebook uses [Unsloth](https://github.com/unslothai/unsloth) to
+QLoRA-finetune Llama 3.1 8B on your dataset — small trainable adapter
+layers on top of a frozen base model, which is what makes this feasible
+on a free GPU. Training takes roughly 30–90 minutes depending on dataset
+size. It ends by exporting a GGUF file you can run locally.
+
+This step can't be folded into `build_dataset.py` — Colab needs you to
+manually pick a GPU runtime and upload the file through its UI.
+
+### 8. Run your fine-tuned model locally with Ollama
+
+After downloading the `.gguf` file from Colab:
+
+```bash
+echo "FROM ./your-model.gguf" > Modelfile
+ollama create philosopher-custom -f Modelfile
+```
+
+Then update `OLLAMA_MODEL = "philosopher-custom"` in `query.py`. Everything
+else — retrieval, the persona prompt, the chat loop — works unchanged.
+
+### Honest expectations
+
+- Dataset size drives quality more than anything else. A few hundred
+  dialogue pairs will give you a subtle style shift, not a dramatic
+  transformation — that's normal for this scale of fine-tuning.
+- This changes *style and reasoning rhythm*, not factual knowledge — RAG
+  is still doing the heavy lifting on content grounding.
+- Colab's free tier can disconnect on idle or high GPU demand — don't
+  close the tab mid-training.
+
+## Running tests
+
+```bash
+python3 -m pytest
+```
+
 ## Notes & next steps
 
 - **Adding more philosophers**: add entries to `BOOKS` in
-  `download_texts.py`, rerun it, then rerun `build_index.py`.
-- **This is still RAG under the hood**: it's a general-purpose model
-  reasoning over retrieved passages, not a model that has actually
-  learned to think differently. If you want a genuinely distinct
-  reasoning style (not just well-briefed answers), that's a fine-tuning
-  step on argumentation patterns — a bigger project on top of this one.
+  `download_texts.py`, rerun it, then rerun `build_index.py` (and the
+  dataset scripts if you're using the fine-tuning pipeline).
 - **Speed**: everything runs on CPU by default. If you have a decent
   GPU, Ollama will automatically use it and responses will be much
   faster.
