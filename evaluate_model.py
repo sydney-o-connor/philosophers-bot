@@ -29,7 +29,7 @@ from datetime import datetime
 
 import ollama
 
-from query import load_retrieval, retrieve, build_context_message, SYSTEM_PROMPT, OLLAMA_MODEL as DEFAULT_BOT_MODEL
+from query import load_retrieval, retrieve, build_context_message, compact_message, trim_history, SYSTEM_PROMPT, OLLAMA_MODEL as DEFAULT_BOT_MODEL
 
 DEFAULT_TEST_FILE = "eval/test_cases.jsonl"
 DEFAULT_OUTPUT_DIR = "eval/results"
@@ -84,6 +84,14 @@ def run_conversation(test_case, collection, embed_model, bot_model):
 
         transcript.append({"speaker": "user", "text": turn})
         transcript.append({"speaker": "bot", "text": answer})
+
+        # Same context-management fix as query.py's interactive loop:
+        # strip the heavy background text out of the turn just answered,
+        # and cap total history length. Keeps long multi-turn test cases
+        # from blowing up the context window the same way a real long
+        # chat would -- see query.py's compact_message()/trim_history().
+        messages[-2]["content"] = compact_message(turn)
+        messages = trim_history(messages)
 
     return transcript
 

@@ -117,6 +117,16 @@ follow-up like "but doesn't that contradict what you just said?" and it
 will actually have that context. Type `reset` to clear history and start
 a fresh conversation, or `exit` to quit.
 
+**How memory stays bounded**: each turn's retrieval pulls a fair amount
+of background text (thousands of tokens). If every past turn kept that
+text around forever, a long conversation would eventually exceed the
+model's context window. To avoid that, once a turn is answered its
+background text is dropped from history (the model's own reply already
+reflects what it took from it — later turns just need the question, not
+the raw passages again), and history is also hard-capped at
+`MAX_HISTORY_EXCHANGES` (8 by default, in `config.py`) exchanges. Older
+turns roll off first.
+
 ## How the bot's "voice" works
 
 `query.py` doesn't just dump the closest-matching passage into the prompt.
@@ -302,10 +312,20 @@ python3 -m pytest
 
 - **Adding more philosophers**: add entries to `BOOKS` in
   `download_texts.py`, rerun it, then rerun `build_index.py` (and the
-  dataset scripts if you're using the fine-tuning pipeline) (via [Project Gutenberg](https://www.gutenberg.org)).
+  dataset scripts if you're using the fine-tuning pipeline).
 - **Speed**: everything runs on CPU by default. If you have a decent
   GPU, Ollama will automatically use it and responses will be much
   faster.
 - **Copyright**: all texts here are public domain. If you want to add
   more recent philosophers, check their copyright status first —
   Gutenberg only hosts public-domain works.
+
+## License
+
+The code in this repo is provided as-is — add a `LICENSE` file (MIT is a
+common, permissive choice) if you want to make the terms explicit for
+others using or contributing to it.
+
+All philosophical texts downloaded by `download_texts.py` are public
+domain in the US (via [Project Gutenberg](https://www.gutenberg.org)),
+independent of whatever license you choose for the code itself.

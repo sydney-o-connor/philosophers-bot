@@ -20,7 +20,7 @@ import chromadb
 import ollama
 from sentence_transformers import SentenceTransformer
 
-from config import DB_DIR, COLLECTION_NAME, OLLAMA_MODEL, TOP_K, CANDIDATE_POOL, MAX_PER_AUTHOR, EMBED_MODEL_NAME
+from config import DB_DIR, COLLECTION_NAME, OLLAMA_MODEL, TOP_K, CANDIDATE_POOL, MAX_PER_AUTHOR, EMBED_MODEL_NAME, MAX_HISTORY_EXCHANGES
 
 # This is the bot's persona. It's written so the model treats the retrieved
 # excerpts as its OWN internalized knowledge — background it has absorbed —
@@ -93,6 +93,31 @@ def build_context_message(question, passages):
 QUESTION: {question}"""
 
 
+def compact_message(question):
+    """A stripped-down version of a past turn, used once that turn has
+    already been answered. We drop the retrieved background text and
+    keep just the question -- the model's own prior answer already
+    reflects what it took from that background, so re-sending the raw
+    passages on every later turn is pure waste. Without this, a long
+    conversation's context grows by a full retrieval batch (thousands of
+    tokens) every turn and can blow past the model's context window."""
+    return f"QUESTION: {question}"
+
+
+def trim_history(messages, max_exchanges=MAX_HISTORY_EXCHANGES):
+    """Keeps the system message plus at most the last max_exchanges
+    (question, answer) pairs. This is a hard backstop in addition to
+    compact_message() above -- even with background text stripped,
+    an unbounded number of turns would eventually still grow the
+    context indefinitely, so we also cap how far back memory reaches."""
+    system_msg = messages[0]
+    conversation = messages[1:]
+    max_messages = max_exchanges * 2  # each exchange = 1 user + 1 assistant message
+    if len(conversation) > max_messages:
+        conversation = conversation[-max_messages:]
+    return [system_msg] + conversation
+
+
 def load_retrieval():
     """Loads the embedding model and Chroma collection. Shared by main()
     here and by evaluate_model.py, so both use identical retrieval."""
@@ -145,6 +170,13 @@ def main():
         # Store the assistant's reply in history too, so the NEXT turn
         # can refer back to it ("what did you just say about X?").
         messages.append({"role": "assistant", "content": "".join(answer_chunks)})
+
+        # Strip the heavy background text out of the turn we just
+        # finished (the model already used it -- keeping it around only
+        # bloats every future turn's context) and cap total history
+        # length as a backstop. See compact_message()/trim_history().
+        messages[-2]["content"] = compact_message(question)
+        messages = trim_history(messages)
 
 
 if __name__ == "__main__":

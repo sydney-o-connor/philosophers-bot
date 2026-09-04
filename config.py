@@ -29,3 +29,8 @@ COLLECTION_NAME = "philosophers"
 TOP_K = 10                     # how many passages to retrieve per question
 CANDIDATE_POOL = 30            # how many nearest matches to pull before diversifying
 MAX_PER_AUTHOR = 3             # cap per philosopher so one voice doesn't dominate
+
+# Conversation memory: how many previous Q&A exchanges to keep in history.
+# Older exchanges beyond this are dropped from context (oldest first) so
+# a long chat doesn't eventually exceed the model's context window.
+MAX_HISTORY_EXCHANGES = 8
