@@ -302,7 +302,7 @@ python3 -m pytest
 
 - **Adding more philosophers**: add entries to `BOOKS` in
   `download_texts.py`, rerun it, then rerun `build_index.py` (and the
-  dataset scripts if you're using the fine-tuning pipeline).
+  dataset scripts if you're using the fine-tuning pipeline) (via [Project Gutenberg](https://www.gutenberg.org)).
 - **Speed**: everything runs on CPU by default. If you have a decent
   GPU, Ollama will automatically use it and responses will be much
   faster.
