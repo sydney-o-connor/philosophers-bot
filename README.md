@@ -1,5 +1,5 @@
 # Philosopher RAG Bot
-[![Run tests](https://github.com/sydney-o-connor/philosophers-bot/actions/workflows/test.yml/badge.svg)](https://github.com/sydney-o-connor/philosophers-bot/actions/workflows/test.yml)
+[![Python package](https://github.com/sydney-o-connor/philosophers-bot/actions/workflows/python-package.yml/badge.svg)](https://github.com/sydney-o-connor/philosophers-bot/actions/workflows/python-package.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **A local, free chatbot that synthesizes ideas from classic philosophers into one coherent voice.**
